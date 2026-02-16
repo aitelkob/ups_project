@@ -492,7 +492,7 @@ export default function DeBagMetricsDashboard({
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl space-y-4 p-4 pb-10 text-slate-900">
+    <main className="mx-auto min-h-screen max-w-7xl space-y-4 p-3 pb-10 text-slate-900 sm:p-4">
       <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -501,7 +501,7 @@ export default function DeBagMetricsDashboard({
               Time-and-motion capture for UPS DeBag operations.
             </p>
           </div>
-          <div className="inline-flex rounded-xl border border-slate-300 bg-slate-100 p-1">
+          <div className="grid w-full grid-cols-2 rounded-xl border border-slate-300 bg-slate-100 p-1 md:inline-flex md:w-auto">
             <button
               type="button"
               onClick={() => setTab("OPERATIONS")}
@@ -542,7 +542,7 @@ export default function DeBagMetricsDashboard({
       {tab === "OPERATIONS" ? (
         <div className="grid gap-4 xl:grid-cols-12">
           <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-5">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold">Input - Add Observation</h2>
               <button
                 type="button"
@@ -858,7 +858,66 @@ export default function DeBagMetricsDashboard({
               </button>
             </div>
 
-            <div className="max-h-[28rem] overflow-auto rounded-xl border border-slate-200">
+            <div className="md:hidden space-y-2">
+              {loading ? (
+                <div className="rounded-xl border border-slate-200 p-3 text-center text-slate-500">
+                  Loading...
+                </div>
+              ) : displayedObservations.length === 0 ? (
+                <div className="rounded-xl border border-slate-200 p-3 text-center text-slate-500">
+                  No observations yet.
+                </div>
+              ) : (
+                displayedObservations.map((row) => (
+                  <article key={row.id} className="rounded-xl border border-slate-200 p-3 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold">{formatPerson(row.person)}</p>
+                        <p className="text-xs text-slate-500">
+                          {new Date(row.createdAt).toLocaleTimeString()} - {row.role} - {row.belt}
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-1 text-xs font-semibold ${flowBadge(row.flowCondition)}`}
+                      >
+                        {row.flowCondition}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Avg sec/bag</p>
+                        <span
+                          className={`mt-1 inline-flex rounded-full px-2 py-1 font-semibold ${speedPill(row.avgSecondsPerBag)}`}
+                        >
+                          {row.avgSecondsPerBag.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Shift</p>
+                        <p className="mt-1 font-semibold">{row.shiftWindow}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Quality</p>
+                        <p className="mt-1 font-semibold">{row.qualityIssue ? "Y" : "N"}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Safety</p>
+                        <p className="mt-1 font-semibold">{row.safetyIssue ? "Y" : "N"}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => deleteObservation(row.id)}
+                      className="mt-3 w-full rounded-lg border border-red-300 px-2 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </article>
+                ))
+              )}
+            </div>
+
+            <div className="hidden max-h-[28rem] overflow-auto rounded-xl border border-slate-200 md:block">
               <table className="min-w-full text-left text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-100">
                   <tr>
@@ -972,7 +1031,33 @@ export default function DeBagMetricsDashboard({
                 <span className="font-medium">Observations:</span> {report.totals.observations}
               </div>
 
-              <div className="overflow-auto rounded-xl border border-slate-200">
+              <div className="md:hidden space-y-2">
+                {report.perPerson.map((row) => (
+                  <article key={row.personId} className="rounded-xl border border-slate-200 p-3 shadow-sm">
+                    <p className="text-sm font-semibold">{row.personName}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Obs</p>
+                        <p className="mt-1 font-semibold">{row.observations}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Avg sec/bag</p>
+                        <p className="mt-1 font-semibold">{row.avgSecondsPerBag.toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Quality %</p>
+                        <p className="mt-1 font-semibold">{row.qualityIssueRate.toFixed(2)}%</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Safety %</p>
+                        <p className="mt-1 font-semibold">{row.safetyIssueRate.toFixed(2)}%</p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden overflow-auto rounded-xl border border-slate-200 md:block">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-slate-100">
                     <tr>
@@ -997,7 +1082,33 @@ export default function DeBagMetricsDashboard({
                 </table>
               </div>
 
-              <div className="overflow-auto rounded-xl border border-slate-200">
+              <div className="md:hidden space-y-2">
+                {report.byRole.map((row) => (
+                  <article key={row.role} className="rounded-xl border border-slate-200 p-3 shadow-sm">
+                    <p className="text-sm font-semibold">{row.role}</p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Obs</p>
+                        <p className="mt-1 font-semibold">{row.observations}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Avg sec/bag</p>
+                        <p className="mt-1 font-semibold">{row.avgSecondsPerBag.toFixed(2)}</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Quality %</p>
+                        <p className="mt-1 font-semibold">{row.qualityIssueRate.toFixed(2)}%</p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-2">
+                        <p className="text-slate-500">Safety %</p>
+                        <p className="mt-1 font-semibold">{row.safetyIssueRate.toFixed(2)}%</p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="hidden overflow-auto rounded-xl border border-slate-200 md:block">
                 <table className="min-w-full text-left text-sm">
                   <thead className="bg-slate-100">
                     <tr>
