@@ -60,11 +60,13 @@ ups_project/
 Create `.env` from `.env.example`:
 
 ```env
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require"
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
+DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require"
 APP_PIN=""
 ```
 
-- `DATABASE_URL`: Postgres connection string (Supabase/Neon)
+- `DATABASE_URL`: pooled Postgres URL (runtime, Vercel-safe)
+- `DIRECT_URL`: direct Postgres URL (for Prisma migrations)
 - `APP_PIN`: Optional UI/API PIN
 
 ## Local Setup
@@ -89,16 +91,21 @@ Open `http://localhost:3000`.
 - `npm run lint` - lint code
 - `npm run db:generate` - generate Prisma client
 - `npm run db:migrate` - create/apply development migration
+- `npm run db:migrate:deploy` - apply existing migrations in target environment
 - `npm run db:push` - push schema without migrations
 - `npm run db:seed` - seed starter people
 
 ## Vercel Deployment (Recommended)
 
 1. Create free Postgres DB (Supabase or Neon).
-2. Add `DATABASE_URL` and optional `APP_PIN` in Vercel project environment variables.
+2. In Vercel environment variables add:
+   - `DATABASE_URL` (pooled Supabase URL)
+   - `DIRECT_URL` (direct Supabase URL)
+   - optional `APP_PIN`
 3. Import repo into Vercel and deploy.
-4. Migrations are applied during Vercel builds via:
-   - `if [ "$VERCEL" = "1" ]; then prisma migrate deploy; fi && prisma generate && next build`
+4. Run migrations once from your local machine:
+   - `npm run db:migrate:deploy`
+5. Redeploy in Vercel after migrations succeed.
 
 ## API Runtime Note
 
