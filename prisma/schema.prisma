@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DUMPER
+  UNZIPPER
+}
+
+enum Belt {
+  DEBAG1
+  DEBAG2
+}
+
+enum ShiftWindow {
+  EARLY
+  MID
+  LATE
+}
+
+enum FlowCondition {
+  NORMAL
+  PEAK
+  JAM
+}
+
+model Person {
+  id           Int           @id @default(autoincrement())
+  name         String?
+  employeeCode String?       @unique
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  observations Observation[]
+}
+
+model Observation {
+  id               Int           @id @default(autoincrement())
+  personId         Int
+  role             Role
+  belt             Belt
+  shiftWindow      ShiftWindow
+  bagsTimed        Int           @default(10)
+  totalSeconds     Int
+  avgSecondsPerBag Float
+  flowCondition    FlowCondition @default(NORMAL)
+  qualityIssue     Boolean       @default(false)
+  safetyIssue      Boolean       @default(false)
+  notes            String?
+  createdAt        DateTime      @default(now())
+
+  person Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([personId])
+  @@index([role])
+}

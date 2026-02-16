@@ -1,36 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DeBag Metrics
 
-## Getting Started
+Production-style local web app for collecting time-and-motion observations on UPS DeBag workers.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Next.js (App Router, TypeScript)
+- SQLite
+- Prisma ORM
+- Tailwind CSS
+
+## Features
+
+- Single-page mobile-friendly data entry form
+- Quick-add Person modal
+- Server-side validation for people and observations
+- Today log table (latest 50 observations) with filter chips
+- Delete observation with confirmation
+- Reports section for date-range analytics
+- CSV export for observation data
+- Optional PIN gate (`APP_PIN`) for simple local protection
+
+## Project Structure
+
+```text
+ups_project/
+├── prisma/
+│   ├── migrations/
+│   ├── schema.prisma
+│   └── seed.ts
+├── src/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── observations/
+│   │   │   │   ├── [id]/route.ts
+│   │   │   │   ├── export/route.ts
+│   │   │   │   └── route.ts
+│   │   │   ├── people/route.ts
+│   │   │   └── reports/route.ts
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   │   └── debag-metrics-app.tsx
+│   └── lib/
+│       ├── auth.ts
+│       ├── prisma.ts
+│       └── validation.ts
+├── .env.example
+├── package.json
+└── README.md
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup Commands
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+From the `ups_project` folder:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm install
+cp .env.example .env
+npm run db:migrate
+npm run db:seed
+npm run dev
+```
 
-## Learn More
+Open: `http://localhost:3000`
 
-To learn more about Next.js, take a look at the following resources:
+## Environment Variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Use `.env`:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```env
+DATABASE_URL="file:./dev.db"
+APP_PIN=""
+```
 
-## Deploy on Vercel
+- `DATABASE_URL`: SQLite database path (stored at `prisma/dev.db`)
+- `APP_PIN`: Optional PIN. If set, UI prompts for PIN and API expects `x-app-pin`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Database Notes
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Prisma schema: `prisma/schema.prisma`
+- SQLite file: `prisma/dev.db`
+- Migration files: `prisma/migrations/*`
+
+## Scripts
+
+- `npm run dev` - start Next.js dev server
+- `npm run build` - production build
+- `npm run start` - start production server
+- `npm run lint` - run ESLint
+- `npm run db:generate` - generate Prisma client
+- `npm run db:migrate` - run/create local migrations
+- `npm run db:push` - push schema without migration
+- `npm run db:seed` - seed starter people
+
+## API Endpoints
+
+- `GET /api/people`
+- `POST /api/people`
+- `GET /api/observations`
+- `POST /api/observations`
+- `DELETE /api/observations/:id`
+- `GET /api/reports?start=YYYY-MM-DD&end=YYYY-MM-DD`
+- `GET /api/observations/export?start=YYYY-MM-DD&end=YYYY-MM-DD`
+
+## CSV Export
+
+Use the "Export CSV" button in Reports, or call:
+
+```bash
+curl "http://localhost:3000/api/observations/export?start=2026-02-01&end=2026-02-16" -o debags.csv
+```
+
+If `APP_PIN` is set:
+
+```bash
+curl -H "x-app-pin: 1234" "http://localhost:3000/api/observations/export?start=2026-02-01&end=2026-02-16" -o debags.csv
+```
