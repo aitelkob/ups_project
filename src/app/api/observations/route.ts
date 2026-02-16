@@ -7,6 +7,8 @@ import {
   parseDateRange,
 } from "@/lib/validation";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   if (!isPinAuthorized(request)) {
     return unauthorizedPinResponse();

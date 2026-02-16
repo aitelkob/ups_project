@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { isPinAuthorized, unauthorizedPinResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+export const runtime = "nodejs";
+
 type RouteContext = {
   params: Promise<{ id: string }>;
 };

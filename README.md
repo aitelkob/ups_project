@@ -1,24 +1,28 @@
 # DeBag Metrics
 
-Production-style local web app for collecting time-and-motion observations on UPS DeBag workers.
+Production-style web app for time-and-motion observations on UPS DeBag workers.
 
 ## Stack
 
 - Next.js (App Router, TypeScript)
-- SQLite
 - Prisma ORM
+- PostgreSQL (Supabase or Neon)
 - Tailwind CSS
+
+## Why PostgreSQL
+
+SQLite is not reliable on Vercel serverless because local disk is not persistent.  
+This project is configured for Postgres so deployed data is durable.
 
 ## Features
 
-- Single-page mobile-friendly data entry form
-- Quick-add Person modal
-- Server-side validation for people and observations
-- Today log table (latest 50 observations) with filter chips
-- Delete observation with confirmation
-- Reports section for date-range analytics
-- CSV export for observation data
-- Optional PIN gate (`APP_PIN`) for simple local protection
+- Mobile-friendly dashboard with clear workflow zones
+- Tap-based timer modal for observation capture
+- Quick add person + searchable person selection
+- Real-time log with quick filters and sticky table header
+- Reports tab with date-range summaries
+- CSV export endpoint
+- Optional app PIN gate (`APP_PIN`)
 
 ## Project Structure
 
@@ -41,7 +45,7 @@ ups_project/
 │   │   ├── layout.tsx
 │   │   └── page.tsx
 │   ├── components/
-│   │   └── debag-metrics-app.tsx
+│   │   └── debag-metrics-dashboard.tsx
 │   └── lib/
 │       ├── auth.ts
 │       ├── prisma.ts
@@ -51,7 +55,19 @@ ups_project/
 └── README.md
 ```
 
-## Setup Commands
+## Environment Variables
+
+Create `.env` from `.env.example`:
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require"
+APP_PIN=""
+```
+
+- `DATABASE_URL`: Postgres connection string (Supabase/Neon)
+- `APP_PIN`: Optional UI/API PIN
+
+## Local Setup
 
 From the `ups_project` folder:
 
@@ -63,36 +79,36 @@ npm run db:seed
 npm run dev
 ```
 
-Open: `http://localhost:3000`
-
-## Environment Variables
-
-Use `.env`:
-
-```env
-DATABASE_URL="file:./dev.db"
-APP_PIN=""
-```
-
-- `DATABASE_URL`: SQLite database path (stored at `prisma/dev.db`)
-- `APP_PIN`: Optional PIN. If set, UI prompts for PIN and API expects `x-app-pin`.
-
-## Database Notes
-
-- Prisma schema: `prisma/schema.prisma`
-- SQLite file: `prisma/dev.db`
-- Migration files: `prisma/migrations/*`
+Open `http://localhost:3000`.
 
 ## Scripts
 
-- `npm run dev` - start Next.js dev server
-- `npm run build` - production build
+- `npm run dev` - start development server
+- `npm run build` - production build (runs `prisma migrate deploy` on Vercel)
 - `npm run start` - start production server
-- `npm run lint` - run ESLint
+- `npm run lint` - lint code
 - `npm run db:generate` - generate Prisma client
-- `npm run db:migrate` - run/create local migrations
-- `npm run db:push` - push schema without migration
+- `npm run db:migrate` - create/apply development migration
+- `npm run db:push` - push schema without migrations
 - `npm run db:seed` - seed starter people
+
+## Vercel Deployment (Recommended)
+
+1. Create free Postgres DB (Supabase or Neon).
+2. Add `DATABASE_URL` and optional `APP_PIN` in Vercel project environment variables.
+3. Import repo into Vercel and deploy.
+4. Migrations are applied during Vercel builds via:
+   - `if [ "$VERCEL" = "1" ]; then prisma migrate deploy; fi && prisma generate && next build`
+
+## API Runtime Note
+
+All Prisma API route handlers explicitly use Node runtime:
+
+```ts
+export const runtime = "nodejs";
+```
+
+This avoids Prisma issues on Edge runtime.
 
 ## API Endpoints
 
@@ -106,13 +122,11 @@ APP_PIN=""
 
 ## CSV Export
 
-Use the "Export CSV" button in Reports, or call:
-
 ```bash
 curl "http://localhost:3000/api/observations/export?start=2026-02-01&end=2026-02-16" -o debags.csv
 ```
 
-If `APP_PIN` is set:
+With PIN:
 
 ```bash
 curl -H "x-app-pin: 1234" "http://localhost:3000/api/observations/export?start=2026-02-01&end=2026-02-16" -o debags.csv

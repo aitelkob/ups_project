@@ -4,6 +4,8 @@ import { isPinAuthorized, unauthorizedPinResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseDateRange, reportRangeSchema } from "@/lib/validation";
 
+export const runtime = "nodejs";
+
 function percentage(count: number, total: number) {
   if (total === 0) return 0;
   return Number(((count / total) * 100).toFixed(2));

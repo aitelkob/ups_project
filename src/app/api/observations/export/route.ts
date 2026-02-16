@@ -3,6 +3,8 @@ import { isPinAuthorized, unauthorizedPinResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseDateRange, reportRangeSchema } from "@/lib/validation";
 
+export const runtime = "nodejs";
+
 function csvEscape(value: string | number | boolean | null) {
   if (value === null) return "";
   const stringValue = String(value);

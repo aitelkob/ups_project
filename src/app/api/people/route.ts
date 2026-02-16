@@ -4,6 +4,8 @@ import { isPinAuthorized, unauthorizedPinResponse } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createPersonSchema } from "@/lib/validation";
 
+export const runtime = "nodejs";
+
 export async function GET(request: NextRequest) {
   if (!isPinAuthorized(request)) {
     return unauthorizedPinResponse();
