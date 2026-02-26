@@ -4,6 +4,7 @@ export const roleSchema = z.enum(["DUMPER", "UNZIPPER"]);
 export const beltSchema = z.enum(["DEBAG1", "DEBAG2"]);
 export const shiftWindowSchema = z.enum(["EARLY", "MID", "LATE"]);
 export const flowConditionSchema = z.enum(["NORMAL", "PEAK", "JAM"]);
+export const documentFileTypeSchema = z.enum(["PDF", "DOCX", "XLSX", "OTHER"]);
 
 export const createPersonSchema = z
   .object({
@@ -48,6 +49,43 @@ export const reportRangeSchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
 });
+
+export const documentSortSchema = z.enum(["newest", "oldest", "title"]);
+
+export const documentFiltersSchema = z.object({
+  query: z.string().trim().optional(),
+  type: documentFileTypeSchema.optional(),
+  sort: documentSortSchema.default("newest"),
+});
+
+export const createDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    fileType: documentFileTypeSchema.default("OTHER"),
+    externalUrl: z.string().trim().url().max(1000).optional().or(z.literal("")),
+    localPathNote: z.string().trim().max(500).optional().or(z.literal("")),
+    tags: z.string().trim().max(300).optional().or(z.literal("")),
+    notes: z.string().trim().max(5000).optional().or(z.literal("")),
+    sizeMb: z.coerce.number().int().min(1).max(5000).optional(),
+  })
+  .refine((data) => Boolean(data.externalUrl || data.localPathNote), {
+    message: "Add either an external URL or a local path note.",
+    path: ["externalUrl"],
+  });
+
+export const updateDocumentSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    fileType: documentFileTypeSchema.optional(),
+    externalUrl: z.string().trim().url().max(1000).optional().or(z.literal("")),
+    localPathNote: z.string().trim().max(500).optional().or(z.literal("")),
+    tags: z.string().trim().max(300).optional().or(z.literal("")),
+    notes: z.string().trim().max(5000).optional().or(z.literal("")),
+    sizeMb: z.coerce.number().int().min(1).max(5000).optional().nullable(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Provide at least one field to update.",
+  });
 
 export function parseDateRange(start: string, end: string) {
   const startDate = new Date(`${start}T00:00:00.000Z`);

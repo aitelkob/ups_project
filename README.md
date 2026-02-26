@@ -23,6 +23,7 @@ This project is configured for Postgres so deployed data is durable.
 - Reports tab with date-range summaries
 - CSV export endpoint
 - Optional app PIN gate (`APP_PIN`)
+- Private `/documents` page (metadata only, no file uploads)
 
 ## Project Structure
 
@@ -35,21 +36,31 @@ ups_project/
 ├── src/
 │   ├── app/
 │   │   ├── api/
+│   │   │   ├── auth/
+│   │   │   │   ├── logout/route.ts
+│   │   │   │   └── pin/route.ts
+│   │   │   ├── documents/
+│   │   │   │   ├── [id]/route.ts
+│   │   │   │   └── route.ts
 │   │   │   ├── observations/
 │   │   │   │   ├── [id]/route.ts
 │   │   │   │   ├── export/route.ts
 │   │   │   │   └── route.ts
 │   │   │   ├── people/route.ts
 │   │   │   └── reports/route.ts
+│   │   ├── documents/page.tsx
 │   │   ├── globals.css
 │   │   ├── layout.tsx
+│   │   ├── pin/page.tsx
 │   │   └── page.tsx
 │   ├── components/
 │   │   └── debag-metrics-dashboard.tsx
 │   └── lib/
 │       ├── auth.ts
+│       ├── auth-session.ts
 │       ├── prisma.ts
 │       └── validation.ts
+├── middleware.ts
 ├── .env.example
 ├── package.json
 └── README.md
@@ -107,6 +118,15 @@ Open `http://localhost:3000`.
    - `npm run db:migrate:deploy`
 5. Redeploy in Vercel after migrations succeed.
 
+## PIN Auth (Documents)
+
+- `POST /api/auth/pin` validates the PIN and sets `dm_auth=1` (httpOnly cookie, 7-day expiry).
+- `POST /api/auth/logout` clears the auth cookie.
+- `middleware.ts` protects:
+  - `/documents`
+  - `/api/documents/*`
+- On unauthorized page access, users are redirected to `/pin?next=...`.
+
 ## API Runtime Note
 
 All Prisma API route handlers explicitly use Node runtime:
@@ -121,6 +141,12 @@ This avoids Prisma issues on Edge runtime.
 
 - `GET /api/people`
 - `POST /api/people`
+- `POST /api/auth/pin`
+- `POST /api/auth/logout`
+- `GET /api/documents?query=&type=&sort=`
+- `POST /api/documents`
+- `PATCH /api/documents/:id`
+- `DELETE /api/documents/:id`
 - `GET /api/observations`
 - `POST /api/observations`
 - `DELETE /api/observations/:id`

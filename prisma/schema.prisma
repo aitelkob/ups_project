@@ -30,6 +30,13 @@ enum FlowCondition {
   JAM
 }
 
+enum DocumentFileType {
+  PDF
+  DOCX
+  XLSX
+  OTHER
+}
+
 model Person {
   id           Int           @id @default(autoincrement())
   name         String?
@@ -37,6 +44,22 @@ model Person {
   active       Boolean       @default(true)
   createdAt    DateTime      @default(now())
   observations Observation[]
+}
+
+model Document {
+  id            String           @id @default(cuid())
+  title         String
+  fileType      DocumentFileType @default(OTHER)
+  externalUrl   String?
+  localPathNote String?
+  tags          String?
+  notes         String?
+  sizeMb        Int?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([createdAt])
+  @@index([fileType])
 }
 
 model Observation {
