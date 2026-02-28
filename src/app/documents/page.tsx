@@ -2,6 +2,8 @@
 
 import { Dispatch, FormEvent, SetStateAction, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createId } from "@paralleldrive/cuid2";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 type FileType = "PDF" | "DOCX" | "XLSX" | "OTHER";
 type SortOption = "newest" | "oldest" | "title";
@@ -10,11 +12,13 @@ type DocumentRecord = {
   id: string;
   title: string;
   fileType: FileType;
-  externalUrl: string | null;
-  localPathNote: string | null;
+  storageBucket: string;
+  storagePath: string;
+  originalFilename: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
   tags: string | null;
   notes: string | null;
-  sizeMb: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -22,11 +26,8 @@ type DocumentRecord = {
 type DocumentFormData = {
   title: string;
   fileType: FileType;
-  externalUrl: string;
-  localPathNote: string;
   tags: string;
   notes: string;
-  sizeMb: string;
 };
 
 const FILE_TYPES: FileType[] = ["PDF", "DOCX", "XLSX", "OTHER"];
@@ -35,64 +36,75 @@ const SORT_OPTIONS: Array<{ value: SortOption; label: string }> = [
   { value: "oldest", label: "Oldest" },
   { value: "title", label: "Title" },
 ];
+const DEFAULT_BUCKET = "debag-docs";
 
 const EMPTY_FORM: DocumentFormData = {
   title: "",
   fileType: "OTHER",
-  externalUrl: "",
-  localPathNote: "",
   tags: "",
   notes: "",
-  sizeMb: "",
 };
 
-function normalizePayload(form: DocumentFormData) {
-  return {
-    title: form.title.trim(),
-    fileType: form.fileType,
-    externalUrl: form.externalUrl.trim(),
-    localPathNote: form.localPathNote.trim(),
-    tags: form.tags.trim(),
-    notes: form.notes.trim(),
-    sizeMb: form.sizeMb ? Number(form.sizeMb) : undefined,
-  };
+function sanitizeFilename(filename: string) {
+  return filename
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
-function validateForm(form: DocumentFormData) {
-  const errors: Partial<Record<keyof DocumentFormData, string>> = {};
-  if (!form.title.trim()) {
-    errors.title = "Title is required.";
-  }
-  if (!form.externalUrl.trim() && !form.localPathNote.trim()) {
-    errors.externalUrl = "Add either external URL or local path.";
-    errors.localPathNote = "Add either external URL or local path.";
-  }
-  if (form.externalUrl.trim()) {
-    try {
-      new URL(form.externalUrl.trim());
-    } catch {
-      errors.externalUrl = "External URL must be a valid URL.";
-    }
-  }
-  if (form.sizeMb && (!Number.isInteger(Number(form.sizeMb)) || Number(form.sizeMb) <= 0)) {
-    errors.sizeMb = "Size MB must be a positive integer.";
-  }
-  return errors;
+function inferFileType(file?: File | null): FileType {
+  if (!file) return "OTHER";
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".pdf")) return "PDF";
+  if (lower.endsWith(".docx")) return "DOCX";
+  if (lower.endsWith(".xlsx")) return "XLSX";
+  return "OTHER";
+}
+
+function monthPath() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString();
 }
 
+function formatBytes(sizeBytes: number | null) {
+  if (!sizeBytes) return "-";
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function validateCreateForm(form: DocumentFormData, file: File | null) {
+  const errors: Partial<Record<keyof DocumentFormData | "file", string>> = {};
+  if (!form.title.trim()) {
+    errors.title = "Title is required.";
+  }
+  if (!file) {
+    errors.file = "Select a file.";
+    return errors;
+  }
+  if (inferFileType(file) === "OTHER") {
+    errors.file = "Only PDF, DOCX, and XLSX are supported.";
+  }
+  return errors;
+}
+
+function validateEditForm(form: DocumentFormData) {
+  const errors: Partial<Record<keyof DocumentFormData, string>> = {};
+  if (!form.title.trim()) {
+    errors.title = "Title is required.";
+  }
+  return errors;
+}
+
 function toEditForm(record: DocumentRecord): DocumentFormData {
   return {
     title: record.title,
     fileType: record.fileType,
-    externalUrl: record.externalUrl ?? "",
-    localPathNote: record.localPathNote ?? "",
     tags: record.tags ?? "",
     notes: record.notes ?? "",
-    sizeMb: record.sizeMb ? String(record.sizeMb) : "",
   };
 }
 
@@ -100,10 +112,16 @@ function DocumentFields({
   form,
   setForm,
   errors,
+  onFileChange,
+  selectedFileName,
+  disableFilePicker,
 }: {
   form: DocumentFormData;
   setForm: Dispatch<SetStateAction<DocumentFormData>>;
-  errors: Partial<Record<keyof DocumentFormData, string>>;
+  errors: Partial<Record<keyof DocumentFormData | "file", string>>;
+  onFileChange: (file: File | null) => void;
+  selectedFileName: string;
+  disableFilePicker: boolean;
 }) {
   return (
     <div className="grid gap-3">
@@ -136,55 +154,29 @@ function DocumentFields({
       </label>
 
       <label className="space-y-1">
-        <span className="text-sm font-medium">External URL</span>
+        <span className="text-sm font-medium">File *</span>
         <input
-          value={form.externalUrl}
-          onChange={(event) =>
-            setForm((prev) => ({ ...prev, externalUrl: event.target.value }))
-          }
+          type="file"
+          accept=".pdf,.docx,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
           className="w-full rounded-lg border border-slate-300 p-3"
-          placeholder="https://drive.google.com/..."
+          disabled={disableFilePicker}
         />
-        {errors.externalUrl ? <p className="text-xs text-red-600">{errors.externalUrl}</p> : null}
+        {selectedFileName ? (
+          <p className="text-xs text-slate-600">Selected: {selectedFileName}</p>
+        ) : null}
+        {errors.file ? <p className="text-xs text-red-600">{errors.file}</p> : null}
       </label>
 
       <label className="space-y-1">
-        <span className="text-sm font-medium">Local Path Note</span>
+        <span className="text-sm font-medium">Tags</span>
         <input
-          value={form.localPathNote}
-          onChange={(event) =>
-            setForm((prev) => ({ ...prev, localPathNote: event.target.value }))
-          }
+          value={form.tags}
+          onChange={(event) => setForm((prev) => ({ ...prev, tags: event.target.value }))}
           className="w-full rounded-lg border border-slate-300 p-3"
-          placeholder="DeBag Vault / Week 3 / file.docx"
+          placeholder="timing, week3"
         />
-        {errors.localPathNote ? (
-          <p className="text-xs text-red-600">{errors.localPathNote}</p>
-        ) : null}
       </label>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="space-y-1">
-          <span className="text-sm font-medium">Tags</span>
-          <input
-            value={form.tags}
-            onChange={(event) => setForm((prev) => ({ ...prev, tags: event.target.value }))}
-            className="w-full rounded-lg border border-slate-300 p-3"
-            placeholder="timing, week3"
-          />
-        </label>
-        <label className="space-y-1">
-          <span className="text-sm font-medium">Size MB</span>
-          <input
-            type="number"
-            value={form.sizeMb}
-            onChange={(event) => setForm((prev) => ({ ...prev, sizeMb: event.target.value }))}
-            className="w-full rounded-lg border border-slate-300 p-3"
-            placeholder="75"
-          />
-          {errors.sizeMb ? <p className="text-xs text-red-600">{errors.sizeMb}</p> : null}
-        </label>
-      </div>
 
       <label className="space-y-1">
         <span className="text-sm font-medium">Notes</span>
@@ -211,11 +203,17 @@ export default function DocumentsPage() {
   const [sort, setSort] = useState<SortOption>("newest");
 
   const [form, setForm] = useState<DocumentFormData>(EMPTY_FORM);
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof DocumentFormData, string>>>({});
+  const [fileToUpload, setFileToUpload] = useState<File | null>(null);
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<keyof DocumentFormData | "file", string>>
+  >({});
+  const [uploading, setUploading] = useState(false);
 
   const [editing, setEditing] = useState<DocumentRecord | null>(null);
   const [editForm, setEditForm] = useState<DocumentFormData>(EMPTY_FORM);
-  const [editErrors, setEditErrors] = useState<Partial<Record<keyof DocumentFormData, string>>>({});
+  const [editErrors, setEditErrors] = useState<Partial<Record<keyof DocumentFormData, string>>>(
+    {},
+  );
 
   const queryString = useMemo(() => {
     const params = new URLSearchParams();
@@ -259,26 +257,72 @@ export default function DocumentsPage() {
   async function onCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
-    const validationErrors = validateForm(form);
+    const validationErrors = validateCreateForm(form, fileToUpload);
     setFormErrors(validationErrors);
-    if (Object.keys(validationErrors).length > 0) return;
+    if (Object.keys(validationErrors).length > 0 || !fileToUpload) return;
 
+    setUploading(true);
     try {
+      const uploadId = createId();
+      const sanitized = sanitizeFilename(fileToUpload.name);
+      const storagePath = `documents/${monthPath()}/${uploadId}-${sanitized}`;
+      const contentType = fileToUpload.type || "application/octet-stream";
+
+      const { error: uploadError } = await getSupabaseClient().storage
+        .from(DEFAULT_BUCKET)
+        .upload(storagePath, fileToUpload, {
+          contentType,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
       const response = await fetch("/api/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(normalizePayload(form)),
+        body: JSON.stringify({
+          title: form.title.trim(),
+          fileType: form.fileType,
+          storageBucket: DEFAULT_BUCKET,
+          storagePath,
+          originalFilename: fileToUpload.name,
+          mimeType: contentType,
+          sizeBytes: fileToUpload.size,
+          tags: form.tags.trim(),
+          notes: form.notes.trim(),
+        }),
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
-        throw new Error(payload.error || "Unable to create document.");
+        throw new Error(payload.error || "Unable to save metadata.");
       }
-      setForm(EMPTY_FORM);
-      setMessage("Document added.");
       const created = (await response.json()) as DocumentRecord;
       setRecords((prev) => [created, ...prev]);
+      setForm(EMPTY_FORM);
+      setFileToUpload(null);
+      setFormErrors({});
+      setMessage("Upload complete.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create document.");
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function openDocument(id: string) {
+    setError("");
+    try {
+      const response = await fetch(`/api/documents/${id}/signed-url`);
+      if (!response.ok) {
+        const payload = (await response.json()) as { error?: string };
+        throw new Error(payload.error || "Unable to open document.");
+      }
+      const payload = (await response.json()) as { signedUrl: string };
+      window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to open document.");
     }
   }
 
@@ -308,7 +352,7 @@ export default function DocumentsPage() {
     event.preventDefault();
     if (!editing) return;
     setError("");
-    const validationErrors = validateForm(editForm);
+    const validationErrors = validateEditForm(editForm);
     setEditErrors(validationErrors);
     if (Object.keys(validationErrors).length > 0) return;
 
@@ -316,7 +360,12 @@ export default function DocumentsPage() {
       const response = await fetch(`/api/documents/${editing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(normalizePayload(editForm)),
+        body: JSON.stringify({
+          title: editForm.title.trim(),
+          fileType: editForm.fileType,
+          tags: editForm.tags.trim(),
+          notes: editForm.notes.trim(),
+        }),
       });
       if (!response.ok) {
         const payload = (await response.json()) as { error?: string };
@@ -344,7 +393,7 @@ export default function DocumentsPage() {
           <div>
             <h1 className="text-2xl font-bold">Documents</h1>
             <p className="text-sm text-slate-600">
-              Private metadata vault for study files (links and local notes only).
+              Private file storage for DeBag study documents.
             </p>
           </div>
           <button
@@ -369,14 +418,25 @@ export default function DocumentsPage() {
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-lg font-semibold">Add Document</h2>
+        <h2 className="mb-3 text-lg font-semibold">Upload Document</h2>
         <form onSubmit={onCreate} className="space-y-3">
-          <DocumentFields form={form} setForm={setForm} errors={formErrors} />
+          <DocumentFields
+            form={form}
+            setForm={setForm}
+            errors={formErrors}
+            onFileChange={(file) => {
+              setFileToUpload(file);
+              setForm((prev) => ({ ...prev, fileType: inferFileType(file) }));
+            }}
+            selectedFileName={fileToUpload?.name || ""}
+            disableFilePicker={uploading}
+          />
           <button
             type="submit"
-            className="w-full rounded-xl bg-blue-700 p-4 text-lg font-semibold text-white hover:bg-blue-800"
+            disabled={uploading}
+            className="w-full rounded-xl bg-blue-700 p-4 text-lg font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
           >
-            Save Document
+            {uploading ? "Uploading..." : "Upload & Save"}
           </button>
         </form>
       </section>
@@ -433,25 +493,21 @@ export default function DocumentsPage() {
                     <p className="text-xs text-slate-500">
                       {record.fileType} - Created {formatDate(record.createdAt)}
                     </p>
+                    <p className="text-xs text-slate-500">
+                      {record.originalFilename || "unknown"} - {formatBytes(record.sizeBytes)}
+                    </p>
                     {record.tags ? (
                       <p className="mt-1 text-xs text-slate-600">Tags: {record.tags}</p>
                     ) : null}
                   </div>
                   <div className="grid grid-cols-3 gap-2 sm:flex">
-                    {record.externalUrl ? (
-                      <a
-                        href={record.externalUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-medium hover:bg-slate-50"
-                      >
-                        Open
-                      </a>
-                    ) : (
-                      <span className="rounded-lg border border-slate-200 px-3 py-2 text-center text-sm text-slate-400">
-                        No Link
-                      </span>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => openDocument(record.id)}
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-center text-sm font-medium hover:bg-slate-50"
+                    >
+                      Open
+                    </button>
                     <button
                       type="button"
                       onClick={() => beginEdit(record)}
@@ -468,9 +524,6 @@ export default function DocumentsPage() {
                     </button>
                   </div>
                 </div>
-                {record.localPathNote ? (
-                  <p className="mt-2 text-xs text-slate-600">Local path: {record.localPathNote}</p>
-                ) : null}
                 {record.notes ? (
                   <details className="mt-2 rounded-lg bg-slate-50 p-2">
                     <summary className="cursor-pointer text-sm font-medium text-slate-700">
@@ -490,7 +543,60 @@ export default function DocumentsPage() {
           <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl">
             <h3 className="text-lg font-semibold">Edit Document</h3>
             <form onSubmit={onUpdate} className="mt-3 space-y-3">
-              <DocumentFields form={editForm} setForm={setEditForm} errors={editErrors} />
+              <div className="grid gap-3">
+                <label className="space-y-1">
+                  <span className="text-sm font-medium">Title *</span>
+                  <input
+                    value={editForm.title}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({ ...prev, title: event.target.value }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 p-3"
+                  />
+                  {editErrors.title ? (
+                    <p className="text-xs text-red-600">{editErrors.title}</p>
+                  ) : null}
+                </label>
+                <label className="space-y-1">
+                  <span className="text-sm font-medium">File Type</span>
+                  <select
+                    value={editForm.fileType}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        fileType: event.target.value as FileType,
+                      }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 p-3"
+                  >
+                    {FILE_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1">
+                  <span className="text-sm font-medium">Tags</span>
+                  <input
+                    value={editForm.tags}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({ ...prev, tags: event.target.value }))
+                    }
+                    className="w-full rounded-lg border border-slate-300 p-3"
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span className="text-sm font-medium">Notes</span>
+                  <textarea
+                    value={editForm.notes}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({ ...prev, notes: event.target.value }))
+                    }
+                    className="min-h-24 w-full rounded-lg border border-slate-300 p-3"
+                  />
+                </label>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"

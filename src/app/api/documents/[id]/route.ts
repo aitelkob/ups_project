@@ -4,18 +4,14 @@ import {
   unauthorizedSessionResponse,
 } from "@/lib/auth-session";
 import { prisma } from "@/lib/prisma";
-import { createDocumentSchema, updateDocumentSchema } from "@/lib/validation";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { updateDocumentSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
-
-function cleanOptional(value?: string | null) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   if (!isSessionAuthenticated(request)) {
@@ -32,34 +28,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: "Document not found." }, { status: 404 });
     }
 
-    const candidate = {
-      title: parsed.title ?? existing.title,
-      fileType: parsed.fileType ?? existing.fileType,
-      externalUrl:
-        parsed.externalUrl !== undefined
-          ? cleanOptional(parsed.externalUrl)
-          : (existing.externalUrl ?? ""),
-      localPathNote:
-        parsed.localPathNote !== undefined
-          ? cleanOptional(parsed.localPathNote)
-          : (existing.localPathNote ?? ""),
-      tags: parsed.tags !== undefined ? cleanOptional(parsed.tags) : (existing.tags ?? ""),
-      notes: parsed.notes !== undefined ? cleanOptional(parsed.notes) : (existing.notes ?? ""),
-      sizeMb: parsed.sizeMb !== undefined ? parsed.sizeMb : (existing.sizeMb ?? undefined),
-    };
-
-    const validated = createDocumentSchema.parse(candidate);
-
     const updated = await prisma.document.update({
       where: { id },
       data: {
-        title: validated.title.trim(),
-        fileType: validated.fileType,
-        externalUrl: cleanOptional(validated.externalUrl),
-        localPathNote: cleanOptional(validated.localPathNote),
-        tags: cleanOptional(validated.tags),
-        notes: cleanOptional(validated.notes),
-        sizeMb: validated.sizeMb ?? null,
+        title: parsed.title?.trim(),
+        fileType: parsed.fileType,
+        tags: parsed.tags?.trim() || (parsed.tags === "" ? null : undefined),
+        notes: parsed.notes?.trim() || (parsed.notes === "" ? null : undefined),
       },
     });
 
@@ -79,9 +54,28 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   try {
     const { id } = await context.params;
+    const existing = await prisma.document.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Document not found." }, { status: 404 });
+    }
+
+    const { error: storageError } = await getSupabaseAdmin().storage
+      .from(existing.storageBucket)
+      .remove([existing.storagePath]);
+
+    if (storageError) {
+      return NextResponse.json(
+        { error: `Storage delete failed: ${storageError.message}` },
+        { status: 500 },
+      );
+    }
+
     await prisma.document.delete({ where: { id } });
     return new NextResponse(null, { status: 204 });
-  } catch {
-    return NextResponse.json({ error: "Document not found." }, { status: 404 });
+  } catch (error) {
+    if (error instanceof Error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Unable to delete document." }, { status: 500 });
   }
 }

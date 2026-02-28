@@ -47,16 +47,18 @@ model Person {
 }
 
 model Document {
-  id            String           @id @default(cuid())
-  title         String
-  fileType      DocumentFileType @default(OTHER)
-  externalUrl   String?
-  localPathNote String?
-  tags          String?
-  notes         String?
-  sizeMb        Int?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id               String           @id @default(cuid())
+  title            String
+  fileType         DocumentFileType @default(OTHER)
+  storageBucket    String           @default("debag-docs")
+  storagePath      String           @unique
+  originalFilename String?
+  mimeType         String?
+  sizeBytes        Int?
+  tags             String?
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   @@index([createdAt])
   @@index([fileType])

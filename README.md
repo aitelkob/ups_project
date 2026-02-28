@@ -23,7 +23,7 @@ This project is configured for Postgres so deployed data is durable.
 - Reports tab with date-range summaries
 - CSV export endpoint
 - Optional app PIN gate (`APP_PIN`)
-- Private `/documents` page (metadata only, no file uploads)
+- Private `/documents` page with Supabase Storage uploads (no DB blobs)
 
 ## Project Structure
 
@@ -41,6 +41,7 @@ ups_project/
 │   │   │   │   └── pin/route.ts
 │   │   │   ├── documents/
 │   │   │   │   ├── [id]/route.ts
+│   │   │   │   ├── [id]/signed-url/route.ts
 │   │   │   │   └── route.ts
 │   │   │   ├── observations/
 │   │   │   │   ├── [id]/route.ts
@@ -59,6 +60,8 @@ ups_project/
 │       ├── auth.ts
 │       ├── auth-session.ts
 │       ├── prisma.ts
+│       ├── supabaseAdmin.ts
+│       ├── supabaseClient.ts
 │       └── validation.ts
 ├── middleware.ts
 ├── .env.example
@@ -73,11 +76,17 @@ Create `.env` from `.env.example`:
 ```env
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:6543/postgres?pgbouncer=true&connection_limit=1&sslmode=require"
 DIRECT_URL="postgresql://USER:PASSWORD@HOST:5432/postgres?sslmode=require"
+NEXT_PUBLIC_SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="YOUR_ANON_KEY"
+SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"
 APP_PIN=""
 ```
 
 - `DATABASE_URL`: pooled Postgres URL (runtime, Vercel-safe)
 - `DIRECT_URL`: direct Postgres URL (for Prisma migrations)
+- `NEXT_PUBLIC_SUPABASE_URL`: Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase browser anon key
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase server-side service role key
 - `APP_PIN`: Optional UI/API PIN
 
 ## Local Setup
@@ -97,7 +106,7 @@ Open `http://localhost:3000`.
 ## Scripts
 
 - `npm run dev` - start development server
-- `npm run build` - production build (runs `prisma migrate deploy` on Vercel)
+- `npm run build` - production build
 - `npm run start` - start production server
 - `npm run lint` - lint code
 - `npm run db:generate` - generate Prisma client
@@ -112,6 +121,9 @@ Open `http://localhost:3000`.
 2. In Vercel environment variables add:
    - `DATABASE_URL` (pooled Supabase URL)
    - `DIRECT_URL` (direct Supabase URL)
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
    - optional `APP_PIN`
 3. Import repo into Vercel and deploy.
 4. Run migrations once from your local machine:
@@ -126,6 +138,14 @@ Open `http://localhost:3000`.
   - `/documents`
   - `/api/documents/*`
 - On unauthorized page access, users are redirected to `/pin?next=...`.
+
+## Documents Uploads (Private)
+
+- Files are uploaded from browser to a private Supabase bucket (`debag-docs`) and never stored in Postgres.
+- Prisma stores only metadata (`storageBucket`, `storagePath`, filename, mime type, size, notes/tags).
+- Open action calls signed URL route:
+  - `GET /api/documents/:id/signed-url` (5-minute URL)
+- Delete action removes both storage object and DB row.
 
 ## API Runtime Note
 
@@ -147,6 +167,7 @@ This avoids Prisma issues on Edge runtime.
 - `POST /api/documents`
 - `PATCH /api/documents/:id`
 - `DELETE /api/documents/:id`
+- `GET /api/documents/:id/signed-url`
 - `GET /api/observations`
 - `POST /api/observations`
 - `DELETE /api/observations/:id`

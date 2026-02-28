@@ -9,11 +9,6 @@ import { createDocumentSchema, documentFiltersSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
-function cleanOptional(value?: string | null) {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : null;
-}
-
 export async function GET(request: NextRequest) {
   if (!isSessionAuthenticated(request)) {
     return unauthorizedSessionResponse();
@@ -70,11 +65,13 @@ export async function POST(request: NextRequest) {
       data: {
         title: parsed.title.trim(),
         fileType: parsed.fileType,
-        externalUrl: cleanOptional(parsed.externalUrl),
-        localPathNote: cleanOptional(parsed.localPathNote),
-        tags: cleanOptional(parsed.tags),
-        notes: cleanOptional(parsed.notes),
-        sizeMb: parsed.sizeMb ?? null,
+        storageBucket: parsed.storageBucket,
+        storagePath: parsed.storagePath.trim(),
+        originalFilename: parsed.originalFilename?.trim() || null,
+        mimeType: parsed.mimeType?.trim() || null,
+        sizeBytes: parsed.sizeBytes ?? null,
+        tags: parsed.tags?.trim() || null,
+        notes: parsed.notes?.trim() || null,
       },
     });
 

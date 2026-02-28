@@ -62,26 +62,21 @@ export const createDocumentSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     fileType: documentFileTypeSchema.default("OTHER"),
-    externalUrl: z.string().trim().url().max(1000).optional().or(z.literal("")),
-    localPathNote: z.string().trim().max(500).optional().or(z.literal("")),
+    storageBucket: z.string().trim().min(1).max(100).default("debag-docs"),
+    storagePath: z.string().trim().min(1).max(1000),
+    originalFilename: z.string().trim().max(255).optional().or(z.literal("")),
+    mimeType: z.string().trim().max(200).optional().or(z.literal("")),
+    sizeBytes: z.coerce.number().int().min(1).max(500 * 1024 * 1024).optional(),
     tags: z.string().trim().max(300).optional().or(z.literal("")),
     notes: z.string().trim().max(5000).optional().or(z.literal("")),
-    sizeMb: z.coerce.number().int().min(1).max(5000).optional(),
-  })
-  .refine((data) => Boolean(data.externalUrl || data.localPathNote), {
-    message: "Add either an external URL or a local path note.",
-    path: ["externalUrl"],
   });
 
 export const updateDocumentSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
     fileType: documentFileTypeSchema.optional(),
-    externalUrl: z.string().trim().url().max(1000).optional().or(z.literal("")),
-    localPathNote: z.string().trim().max(500).optional().or(z.literal("")),
     tags: z.string().trim().max(300).optional().or(z.literal("")),
     notes: z.string().trim().max(5000).optional().or(z.literal("")),
-    sizeMb: z.coerce.number().int().min(1).max(5000).optional().nullable(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Provide at least one field to update.",
