@@ -164,6 +164,7 @@ This avoids Prisma issues on Edge runtime.
 - `POST /api/auth/pin`
 - `POST /api/auth/logout`
 - `GET /api/documents?query=&type=&sort=`
+- `GET /api/documents/health`
 - `POST /api/documents`
 - `PATCH /api/documents/:id`
 - `DELETE /api/documents/:id`
